@@ -7,79 +7,117 @@
 
 template <typename T, T Default = T{}>
 class Matrix {
+private:
+    using internal_key = std::pair<std::size_t, std::size_t>;
+    using internal_container = std::unordered_map<internal_key, T, hash_pair>;
+
+    internal_container internalMap;
+
+    static T getElement(const internal_container map, const internal_key &key) {
+        auto it = map.find(key);
+        if (it != map.end()) {
+            return it->second;
+        } else {
+            return Default;
+        }
+    }
 public:
     Matrix() = default;
 
-    std::size_t size() const { return internalMap.size(); }
+    class Cell {
+        friend class Matrix;
 
-    struct Cell {
-        Matrix &matrix;
-        const std::size_t column;
-        const std::size_t row;
+        internal_container &map;
+        const internal_key key;
 
-        Cell(Matrix &matrix, const std::size_t column, const std::size_t row)
-            : matrix(matrix), column(column), row(row) {}
+        Cell(internal_container &map, const internal_key &key)
+            : map(map), key(key) {}
+    public:
+        Cell(const Cell&) = delete;
+        Cell(Cell&&) = delete;
+        Cell &operator=(const Cell&) = delete;
+        Cell &operator=(Cell&&) = delete;
 
         const Cell &operator=(const T& value) const {
             if (value == Default) {
-                matrix.internalMap.erase(std::make_pair(column, row));
+                map.erase(key);
             } else {
-                matrix.internalMap[std::make_pair(column, row)] = value;
+                map[key] = value;
             }
             return *this;
         }
 
+        // We cannot return const reference to an element
+        // because it may be Default value
         operator T () {
-            auto it = matrix.internalMap.find(std::make_pair(row, column));
-            if (it != matrix.internalMap.end()) {
-                return it->second;
-            } else {
-                return Default;
-            }
+            return getElement(map, key);
+        }
+    };
+
+    class ConstCell {
+        friend class Matrix;
+
+        const internal_container &map;
+        const internal_key key;
+
+        ConstCell(const internal_container &map, const internal_key &key)
+            : map(map), key(key) {}
+    public:
+        ConstCell(const ConstCell&) = delete;
+        ConstCell(ConstCell&&) = delete;
+        ConstCell &operator=(const Cell&) = delete;
+        ConstCell &operator=(Cell&&) = delete;
+
+        // We cannot return const reference to an element
+        // because it may be Default value
+        operator T () {
+            return getElement(map, key);
         }
     };
 
     class ColumnRef {
-        Matrix &matrix;
+        friend class Matrix;
+        internal_container &map;
         const std::size_t index;
+
+        ColumnRef(internal_container &matrix, std::size_t index) : map(matrix), index(index) {}
     public:
-        ColumnRef(Matrix &matrix, std::size_t index) : matrix(matrix), index(index) {}
+        ColumnRef(const ColumnRef&) = delete;
+        ColumnRef(ColumnRef&&) = delete;
+        ColumnRef &operator=(const ColumnRef&) = delete;
+        ColumnRef &operator=(ColumnRef&&) = delete;
+
         Cell operator[](std::size_t rowIndex) const {
-            return Cell( matrix, index, rowIndex );
+            return Cell( map, std::make_pair(index, rowIndex) );
         }
     };
 
     class ConstColumnRef {
-        const Matrix &matrix;
+        friend class Matrix;
+        const internal_container &map;
         const std::size_t index;
-    public:
-        ConstColumnRef(const Matrix &matrix, std::size_t index) : matrix(matrix), index(index) {}
 
-        const T &operator[](std::size_t rowIndex) const {
-            auto it = matrix.internalMap.find(std::make_pair(index, rowIndex));
-            if (it != matrix.internalMap.end()) {
-                return it->second;
-            } else {
-                return Default;
-            }
+        ConstColumnRef(const internal_container &matrix, std::size_t index) : map(matrix), index(index) {}
+    public:
+
+        ConstCell operator[](std::size_t rowIndex) const {
+            return ConstCell( map, std::make_pair(index, rowIndex) );
         }
     };
 
     ColumnRef operator[](std::size_t index) {
-        return ColumnRef(*this, index);
+        return ColumnRef(internalMap, index);
     }
 
     ConstColumnRef operator[](std::size_t index) const {
-        return ConstColumnRef(*this, index);
+        return ConstColumnRef(internalMap, index);
     }
 
-private:
-    using internal_container = std::unordered_map<std::pair<std::size_t, std::size_t>, T, hash_pair>;
-
-    internal_container internalMap;
-public:
     using iterator = typename internal_container::iterator;
     using const_iterator = typename internal_container::const_iterator;
+
+
+    std::size_t size() const { return internalMap.size(); }
 
     iterator begin() {
         return internalMap.begin();
